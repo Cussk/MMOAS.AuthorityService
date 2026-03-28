@@ -1,0 +1,22 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MMOAS.AuthorityService", "MMOAS.AuthorityService.csproj", "{B1D2FDF3-F1B5-437D-B5D3-DF33D6631816}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MMOAS.AuthorityService.Tests", "MMOAS.AuthorityService.Tests\MMOAS.AuthorityService.Tests.csproj", "{D1CBAB96-8DEB-4C80-B7CD-45036173F655}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{B1D2FDF3-F1B5-437D-B5D3-DF33D6631816}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B1D2FDF3-F1B5-437D-B5D3-DF33D6631816}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B1D2FDF3-F1B5-437D-B5D3-DF33D6631816}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B1D2FDF3-F1B5-437D-B5D3-DF33D6631816}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D1CBAB96-8DEB-4C80-B7CD-45036173F655}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D1CBAB96-8DEB-4C80-B7CD-45036173F655}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D1CBAB96-8DEB-4C80-B7CD-45036173F655}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D1CBAB96-8DEB-4C80-B7CD-45036173F655}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+EndGlobal
