@@ -1,3 +1,3 @@
 namespace MMOAS.AuthorityService.Transport.Contracts;
 
-public sealed record WebSocketReadyMessage(string Type, DateTimeOffset UtcNow);
+public sealed record WebSocketReadyMessage(string SessionId, DateTimeOffset ConnectedAtUtc, bool HelloCompleted);
