@@ -78,15 +78,18 @@ async Task SendAndReceiveAsync(
     CancellationToken cancellationToken)
 {
     var outboundJson = JsonSerializer.Serialize(envelope, indentedSerializerOptions);
-    Console.WriteLine(">>> outbound");
+    Console.WriteLine($">>> outbound {envelope.MessageType}");
     Console.WriteLine(outboundJson);
 
     var outboundBytes = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(envelope, serializerOptions));
     await clientSocket.SendAsync(outboundBytes, WebSocketMessageType.Text, true, cancellationToken);
 
     var inboundJson = await ReceiveMessageAsync(clientSocket, cancellationToken);
-    Console.WriteLine("<<< inbound");
+    var inboundEnvelope = JsonSerializer.Deserialize<ClientInboundEnvelope>(inboundJson, serializerOptions);
+
+    Console.WriteLine($"<<< inbound {inboundEnvelope?.MessageType ?? "unknown"}");
     Console.WriteLine(PrettyPrintJson(inboundJson));
+    PrintActivationSummary(inboundEnvelope);
     Console.WriteLine();
 }
 
@@ -122,6 +125,24 @@ string PrettyPrintJson(string json)
 {
     using var document = JsonDocument.Parse(json);
     return JsonSerializer.Serialize(document.RootElement, indentedSerializerOptions);
+}
+
+void PrintActivationSummary(ClientInboundEnvelope? inboundEnvelope)
+{
+    if (inboundEnvelope is null)
+    {
+        return;
+    }
+
+    if (inboundEnvelope.MessageType == AuthorityTransportProtocol.AbilityAcceptedMessageType)
+    {
+        var acceptedMessage = inboundEnvelope.Payload.Deserialize<AbilityAcceptedMessage>(serializerOptions);
+
+        if (acceptedMessage is not null)
+        {
+            Console.WriteLine($"Activation instance: {acceptedMessage.ActivationInstanceId}");
+        }
+    }
 }
 
 internal sealed record TestClientOptions(string WebSocketUrl, string AbilityId, bool ActivateBeforeRegister)
@@ -166,3 +187,10 @@ internal sealed record TestClientOptions(string WebSocketUrl, string AbilityId, 
         return args[index];
     }
 }
+
+internal sealed record ClientInboundEnvelope(
+    string MessageType,
+    int Version,
+    DateTimeOffset ServerUtcNow,
+    string? RequestId,
+    JsonElement Payload);

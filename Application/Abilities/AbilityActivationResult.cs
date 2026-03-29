@@ -5,5 +5,6 @@ public sealed record AbilityActivationResult(
     string SessionId,
     string? EntityId,
     string AbilityId,
+    string? ActivationInstanceId,
     string? Code,
     string? Message);

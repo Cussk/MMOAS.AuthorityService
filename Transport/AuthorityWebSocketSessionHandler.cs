@@ -94,7 +94,7 @@ public sealed class AuthorityWebSocketSessionHandler
             {
                 await socket.CloseAsync(
                     WebSocketCloseStatus.NormalClosure,
-                    "Phase 02 transport session complete.",
+                    "Phase 03 transport session complete.",
                     CancellationToken.None);
             }
 
@@ -275,7 +275,8 @@ public sealed class AuthorityWebSocketSessionHandler
             var acceptedMessage = new AbilityAcceptedMessage(
                 activationResult.SessionId,
                 activationResult.EntityId!,
-                activationResult.AbilityId);
+                activationResult.AbilityId,
+                activationResult.ActivationInstanceId!);
 
             await SendEnvelopeAsync(
                 socket,

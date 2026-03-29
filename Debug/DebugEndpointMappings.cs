@@ -38,6 +38,23 @@ public static class DebugEndpointMappings
             return Results.Ok(response);
         });
 
+        endpoints.MapGet("/debug/activations", (IAuthorityActivationStore activationStore) =>
+        {
+            var snapshot = activationStore.GetSnapshot();
+            var response = new DebugActivationSnapshotResponse(
+                snapshot.Count,
+                snapshot.Activations
+                    .Select(activation => new DebugActivationResponse(
+                        activation.ActivationInstanceId,
+                        activation.SessionId,
+                        activation.EntityId,
+                        activation.AbilityId,
+                        activation.CreatedAtUtc))
+                    .ToArray());
+
+            return Results.Ok(response);
+        });
+
         return endpoints;
     }
 }
