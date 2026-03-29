@@ -2,6 +2,7 @@ using System.Buffers;
 using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
+using MMOAS.AuthorityService.Application.Abilities;
 using MMOAS.AuthorityService.Application.Sessions;
 using MMOAS.AuthorityService.Transport.Contracts;
 
@@ -11,15 +12,18 @@ public sealed class AuthorityWebSocketSessionHandler
 {
     private static readonly JsonSerializerOptions SerializerOptions = new(JsonSerializerDefaults.Web);
     private readonly TimeProvider _timeProvider;
+    private readonly IAbilityActivationService _abilityActivationService;
     private readonly IAuthoritySessionService _sessionService;
     private readonly ILogger<AuthorityWebSocketSessionHandler> _logger;
 
     public AuthorityWebSocketSessionHandler(
         TimeProvider timeProvider,
+        IAbilityActivationService abilityActivationService,
         IAuthoritySessionService sessionService,
         ILogger<AuthorityWebSocketSessionHandler> logger)
     {
         _timeProvider = timeProvider;
+        _abilityActivationService = abilityActivationService;
         _sessionService = sessionService;
         _logger = logger;
     }
@@ -90,7 +94,7 @@ public sealed class AuthorityWebSocketSessionHandler
             {
                 await socket.CloseAsync(
                     WebSocketCloseStatus.NormalClosure,
-                    "Phase 01 transport session complete.",
+                    "Phase 02 transport session complete.",
                     CancellationToken.None);
             }
 
@@ -155,6 +159,10 @@ public sealed class AuthorityWebSocketSessionHandler
 
                 case AuthorityTransportProtocol.RegisterEntityMessageType:
                     await HandleRegisterEntityAsync(socket, sessionId, envelope, cancellationToken);
+                    break;
+
+                case AuthorityTransportProtocol.ActivateAbilityMessageType:
+                    await HandleActivateAbilityAsync(socket, sessionId, envelope, cancellationToken);
                     break;
 
                 default:
@@ -237,6 +245,61 @@ public sealed class AuthorityWebSocketSessionHandler
             AuthorityTransportProtocol.EntityRegisteredMessageType,
             envelope.RequestId,
             entityRegisteredMessage,
+            cancellationToken);
+    }
+
+    private async Task HandleActivateAbilityAsync(
+        WebSocket socket,
+        string sessionId,
+        AuthorityInboundMessageEnvelope envelope,
+        CancellationToken cancellationToken)
+    {
+        if (!TryDeserializePayload<ActivateAbilityCommand>(envelope.Payload, out var command))
+        {
+            await SendErrorAsync(
+                socket,
+                envelope.RequestId,
+                "transport.invalid-payload",
+                "The activate-ability command payload is invalid.",
+                cancellationToken);
+            return;
+        }
+
+        var activationResult = await _abilityActivationService.ActivateAsync(
+            sessionId,
+            command!.AbilityId,
+            cancellationToken);
+
+        if (activationResult.Accepted)
+        {
+            var acceptedMessage = new AbilityAcceptedMessage(
+                activationResult.SessionId,
+                activationResult.EntityId!,
+                activationResult.AbilityId);
+
+            await SendEnvelopeAsync(
+                socket,
+                AuthorityTransportProtocol.AbilityAcceptedMessageType,
+                envelope.RequestId,
+                acceptedMessage,
+                cancellationToken);
+
+            return;
+        }
+
+        var rejectedAbilityId = string.IsNullOrWhiteSpace(activationResult.AbilityId)
+            ? null
+            : activationResult.AbilityId;
+        var rejectedMessage = new AbilityRejectedMessage(
+            activationResult.Code!,
+            activationResult.Message!,
+            rejectedAbilityId);
+
+        await SendEnvelopeAsync(
+            socket,
+            AuthorityTransportProtocol.AbilityRejectedMessageType,
+            envelope.RequestId,
+            rejectedMessage,
             cancellationToken);
     }
 

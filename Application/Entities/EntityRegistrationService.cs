@@ -19,7 +19,7 @@ public sealed class EntityRegistrationService : IEntityRegistrationService
 
         while (true)
         {
-            // Phase 01 still keeps backend-generated IDs and backend time authoritative for registration.
+            // Phase 02 still keeps backend-generated IDs and backend time authoritative for registration.
             var entity = new AuthorityEntityRecord(
                 Guid.NewGuid().ToString("N"),
                 _timeProvider.GetUtcNow());

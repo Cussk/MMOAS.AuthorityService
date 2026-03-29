@@ -4,7 +4,7 @@ using MMOAS.AuthorityService.Transport;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddAuthorityServicePhase01();
+builder.Services.AddAuthorityServicePhase02();
 
 var app = builder.Build();
 

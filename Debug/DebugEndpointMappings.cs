@@ -22,6 +22,22 @@ public static class DebugEndpointMappings
             return Results.Ok(response);
         });
 
+        endpoints.MapGet("/debug/sessions", (IAuthoritySessionStore sessionStore) =>
+        {
+            var snapshot = sessionStore.GetSnapshot();
+            var response = new DebugSessionSnapshotResponse(
+                snapshot.Count,
+                snapshot.Sessions
+                    .Select(session => new DebugSessionResponse(
+                        session.SessionId,
+                        session.ConnectedAtUtc,
+                        session.HelloCompleted,
+                        session.RegisteredEntityId))
+                    .ToArray());
+
+            return Results.Ok(response);
+        });
+
         return endpoints;
     }
 }

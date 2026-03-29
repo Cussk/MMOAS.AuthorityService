@@ -8,5 +8,8 @@ public static class AuthorityTransportProtocol
     public const string ReadyMessageType = "transport.ready";
     public const string RegisterEntityMessageType = "transport.register-entity";
     public const string EntityRegisteredMessageType = "transport.entity-registered";
+    public const string ActivateAbilityMessageType = "transport.activate-ability";
+    public const string AbilityAcceptedMessageType = "transport.ability-accepted";
+    public const string AbilityRejectedMessageType = "transport.ability-rejected";
     public const string ErrorMessageType = "transport.error";
 }

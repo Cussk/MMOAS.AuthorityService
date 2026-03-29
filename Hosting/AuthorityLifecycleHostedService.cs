@@ -26,7 +26,7 @@ public sealed class AuthorityLifecycleHostedService : BackgroundService
         {
             while (await timer.WaitForNextTickAsync(stoppingToken))
             {
-                // Phase 01 still intentionally avoids lifecycle mutation. This loop exists only to establish the
+                // Phase 02 still intentionally avoids lifecycle mutation. This loop exists only to establish the
                 // backend-owned clock boundary that later phases will build on.
                 _logger.LogDebug(
                     "Authority lifecycle stub tick at {TickAtUtc}",

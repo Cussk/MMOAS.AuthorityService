@@ -8,9 +8,13 @@
 
     <ItemGroup>
         <Compile Remove="MMOAS.AuthorityService.Tests\**\*.cs" />
+        <Compile Remove="MMOAS.AuthorityService.TestClient\**\*.cs" />
         <Content Remove="MMOAS.AuthorityService.Tests\**" />
+        <Content Remove="MMOAS.AuthorityService.TestClient\**" />
         <EmbeddedResource Remove="MMOAS.AuthorityService.Tests\**" />
+        <EmbeddedResource Remove="MMOAS.AuthorityService.TestClient\**" />
         <None Remove="MMOAS.AuthorityService.Tests\**" />
+        <None Remove="MMOAS.AuthorityService.TestClient\**" />
     </ItemGroup>
 
 </Project>
