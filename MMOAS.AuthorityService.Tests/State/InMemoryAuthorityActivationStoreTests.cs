@@ -108,4 +108,61 @@ public sealed class InMemoryAuthorityActivationStoreTests
         Assert.Equal(AuthorityActivationPhase.Committed, committedActivation.Phase);
         Assert.Equal(createdAtUtc.AddMilliseconds(500), committedActivation.CommittedAtUtc);
     }
+
+    [Fact]
+    public void TryMarkInterrupted_InterruptsActivationOnlyOnce()
+    {
+        var store = new InMemoryAuthorityActivationStore();
+        var createdAtUtc = new DateTimeOffset(2026, 03, 30, 12, 00, 00, TimeSpan.Zero);
+        var interruptedAtUtc = createdAtUtc.AddMilliseconds(250);
+
+        store.TryAdd(new AuthorityActivationRecord(
+            "activation-001",
+            "session-001",
+            "entity-001",
+            "ability.basic",
+            AuthorityActivationPhase.Accepted,
+            createdAtUtc,
+            createdAtUtc.AddMilliseconds(500),
+            null));
+
+        var firstInterruption = store.TryMarkInterrupted("activation-001", "activation.interrupted.manual", interruptedAtUtc);
+        var secondInterruption = store.TryMarkInterrupted("activation-001", "activation.interrupted.retry", interruptedAtUtc.AddMilliseconds(10));
+        var interruptedActivation = Assert.Single(store.GetSnapshot().Activations);
+
+        Assert.NotNull(firstInterruption);
+        Assert.Null(secondInterruption);
+        Assert.Equal(AuthorityActivationPhase.Interrupted, interruptedActivation.Phase);
+        Assert.Equal("activation.interrupted.manual", interruptedActivation.InterruptionCode);
+        Assert.Equal(interruptedAtUtc, interruptedActivation.InterruptedAtUtc);
+        Assert.Null(interruptedActivation.CommittedAtUtc);
+    }
+
+    [Fact]
+    public void TryMarkCommitted_DoesNotCommitInterruptedActivation()
+    {
+        var store = new InMemoryAuthorityActivationStore();
+        var createdAtUtc = new DateTimeOffset(2026, 03, 30, 12, 00, 00, TimeSpan.Zero);
+        var interruptedAtUtc = createdAtUtc.AddMilliseconds(250);
+
+        store.TryAdd(new AuthorityActivationRecord(
+            "activation-001",
+            "session-001",
+            "entity-001",
+            "ability.basic",
+            AuthorityActivationPhase.Accepted,
+            createdAtUtc,
+            createdAtUtc.AddMilliseconds(500),
+            null));
+
+        var interruptedActivation = store.TryMarkInterrupted("activation-001", "activation.interrupted.manual", interruptedAtUtc);
+        var committedActivation = store.TryMarkCommitted("activation-001", createdAtUtc.AddMilliseconds(500));
+        var snapshotActivation = Assert.Single(store.GetSnapshot().Activations);
+
+        Assert.NotNull(interruptedActivation);
+        Assert.Null(committedActivation);
+        Assert.Equal(AuthorityActivationPhase.Interrupted, snapshotActivation.Phase);
+        Assert.Equal(interruptedAtUtc, snapshotActivation.InterruptedAtUtc);
+        Assert.Null(snapshotActivation.CommittedAtUtc);
+    }
 }

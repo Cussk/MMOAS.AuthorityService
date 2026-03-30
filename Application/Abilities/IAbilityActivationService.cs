@@ -6,4 +6,10 @@ public interface IAbilityActivationService
         string sessionId,
         string? abilityId,
         CancellationToken cancellationToken);
+
+    ValueTask<AbilityInterruptionResult> InterruptAsync(
+        string sessionId,
+        string? activationInstanceId,
+        string? interruptionCode,
+        CancellationToken cancellationToken);
 }

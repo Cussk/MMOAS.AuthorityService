@@ -8,4 +8,6 @@ public sealed record DebugActivationResponse(
     string Phase,
     DateTimeOffset CreatedAtUtc,
     DateTimeOffset CommitDueAtUtc,
-    DateTimeOffset? CommittedAtUtc);
+    DateTimeOffset? CommittedAtUtc,
+    string? InterruptionCode,
+    DateTimeOffset? InterruptedAtUtc);

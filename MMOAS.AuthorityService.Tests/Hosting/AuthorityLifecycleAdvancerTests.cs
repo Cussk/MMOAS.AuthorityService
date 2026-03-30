@@ -104,6 +104,40 @@ public sealed class AuthorityLifecycleAdvancerTests
         Assert.Single(notifier.Notifications);
     }
 
+    [Fact]
+    public async Task AdvanceAsync_DoesNotCommitInterruptedActivation()
+    {
+        var store = new InMemoryAuthorityActivationStore();
+        var notifier = new RecordingSessionNotifier();
+        var advancer = new AuthorityLifecycleAdvancer(
+            store,
+            notifier,
+            NullLogger<AuthorityLifecycleAdvancer>.Instance);
+        var createdAtUtc = new DateTimeOffset(2026, 03, 30, 12, 00, 00, TimeSpan.Zero);
+        var commitDueAtUtc = createdAtUtc.AddMilliseconds(500);
+        var interruptedAtUtc = createdAtUtc.AddMilliseconds(250);
+
+        store.TryAdd(new AuthorityActivationRecord(
+            "activation-001",
+            "session-001",
+            "entity-001",
+            "ability.basic",
+            AuthorityActivationPhase.Accepted,
+            createdAtUtc,
+            commitDueAtUtc,
+            null));
+        store.TryMarkInterrupted("activation-001", "activation.interrupted.manual", interruptedAtUtc);
+
+        await advancer.AdvanceAsync(commitDueAtUtc, CancellationToken.None);
+
+        var activation = Assert.Single(store.GetSnapshot().Activations);
+
+        Assert.Equal(AuthorityActivationPhase.Interrupted, activation.Phase);
+        Assert.Equal(interruptedAtUtc, activation.InterruptedAtUtc);
+        Assert.Null(activation.CommittedAtUtc);
+        Assert.Empty(notifier.Notifications);
+    }
+
     private sealed class RecordingSessionNotifier : IAuthoritySessionNotifier
     {
         private readonly bool _delivered;

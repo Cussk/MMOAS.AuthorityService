@@ -56,6 +56,112 @@ public sealed class AbilityActivationService : IAbilityActivationService
         return ValueTask.FromResult(result);
     }
 
+    public ValueTask<AbilityInterruptionResult> InterruptAsync(
+        string sessionId,
+        string? activationInstanceId,
+        string? interruptionCode,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var normalizedActivationInstanceId = activationInstanceId?.Trim();
+
+        if (string.IsNullOrWhiteSpace(normalizedActivationInstanceId))
+        {
+            return ValueTask.FromResult(RejectInterruption(
+                sessionId,
+                null,
+                null,
+                null,
+                null,
+                "activation.interrupt.invalid-activation-instance",
+                "An interruption requires a non-empty activation instance id."));
+        }
+
+        var normalizedInterruptionCode = interruptionCode?.Trim();
+
+        if (string.IsNullOrWhiteSpace(normalizedInterruptionCode))
+        {
+            return ValueTask.FromResult(RejectInterruption(
+                sessionId,
+                null,
+                null,
+                normalizedActivationInstanceId,
+                null,
+                "activation.interrupt.invalid-code",
+                "An interruption requires a non-empty interruption code."));
+        }
+
+        var existingActivation = _activationStore.Get(normalizedActivationInstanceId);
+
+        if (existingActivation is null)
+        {
+            return ValueTask.FromResult(RejectInterruption(
+                sessionId,
+                null,
+                null,
+                normalizedActivationInstanceId,
+                normalizedInterruptionCode,
+                "activation.interrupt.not-found",
+                $"Activation '{normalizedActivationInstanceId}' was not found."));
+        }
+
+        if (!string.Equals(existingActivation.SessionId, sessionId, StringComparison.Ordinal))
+        {
+            return ValueTask.FromResult(RejectInterruption(
+                sessionId,
+                null,
+                null,
+                normalizedActivationInstanceId,
+                normalizedInterruptionCode,
+                "activation.interrupt.session-mismatch",
+                "An activation may only be interrupted by its owning session."));
+        }
+
+        if (existingActivation.Phase != AuthorityActivationPhase.Accepted)
+        {
+            return ValueTask.FromResult(RejectInterruption(
+                existingActivation.SessionId,
+                existingActivation.EntityId,
+                existingActivation.AbilityId,
+                existingActivation.ActivationInstanceId,
+                normalizedInterruptionCode,
+                "activation.interrupt.not-interruptible",
+                $"Activation '{existingActivation.ActivationInstanceId}' is already {existingActivation.Phase}."));
+        }
+
+        var interruptedActivation = _activationStore.TryMarkInterrupted(
+            normalizedActivationInstanceId,
+            normalizedInterruptionCode,
+            _timeProvider.GetUtcNow());
+
+        if (interruptedActivation is not null)
+        {
+            return ValueTask.FromResult(new AbilityInterruptionResult(
+                true,
+                interruptedActivation.SessionId,
+                interruptedActivation.EntityId,
+                interruptedActivation.AbilityId,
+                interruptedActivation.ActivationInstanceId,
+                interruptedActivation.InterruptionCode,
+                interruptedActivation.InterruptedAtUtc,
+                null,
+                null));
+        }
+
+        var currentActivation = _activationStore.Get(normalizedActivationInstanceId);
+        var currentPhase = currentActivation?.Phase.ToString() ?? "Unavailable";
+
+        return ValueTask.FromResult(RejectInterruption(
+            sessionId,
+            currentActivation?.EntityId,
+            currentActivation?.AbilityId,
+            normalizedActivationInstanceId,
+            normalizedInterruptionCode,
+            "activation.interrupt.not-interruptible",
+            $"Activation '{normalizedActivationInstanceId}' is already {currentPhase}."));
+    }
+
     private string CreateActivationInstance(string sessionId, string entityId, string abilityId)
     {
         while (true)
@@ -79,5 +185,26 @@ public sealed class AbilityActivationService : IAbilityActivationService
                 return activation.ActivationInstanceId;
             }
         }
+    }
+
+    private static AbilityInterruptionResult RejectInterruption(
+        string sessionId,
+        string? entityId,
+        string? abilityId,
+        string? activationInstanceId,
+        string? interruptionCode,
+        string code,
+        string message)
+    {
+        return new AbilityInterruptionResult(
+            false,
+            sessionId,
+            entityId,
+            abilityId,
+            activationInstanceId,
+            interruptionCode,
+            null,
+            code,
+            message);
     }
 }

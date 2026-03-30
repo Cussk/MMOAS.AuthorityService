@@ -10,7 +10,7 @@ namespace MMOAS.AuthorityService.Composition;
 
 public static class ServiceCollectionExtensions
 {
-    public static IServiceCollection AddAuthorityServicePhase04(this IServiceCollection services)
+    public static IServiceCollection AddAuthorityServicePhase05(this IServiceCollection services)
     {
         services.AddSingleton(TimeProvider.System);
         services.AddSingleton<IAuthorityActivationStore, InMemoryAuthorityActivationStore>();

@@ -8,4 +8,6 @@ public sealed record AuthorityActivationRecord(
     AuthorityActivationPhase Phase,
     DateTimeOffset CreatedAtUtc,
     DateTimeOffset CommitDueAtUtc,
-    DateTimeOffset? CommittedAtUtc);
+    DateTimeOffset? CommittedAtUtc,
+    string? InterruptionCode = null,
+    DateTimeOffset? InterruptedAtUtc = null);

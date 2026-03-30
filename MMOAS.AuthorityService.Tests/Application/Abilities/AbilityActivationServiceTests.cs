@@ -73,6 +73,134 @@ public sealed class AbilityActivationServiceTests
         Assert.Equal(0, activationStore.GetSnapshot().Count);
     }
 
+    [Fact]
+    public async Task InterruptAsync_MarksAcceptedActivationInterrupted()
+    {
+        var timeProvider = new FixedTimeProvider(new DateTimeOffset(2026, 03, 30, 12, 00, 00, TimeSpan.Zero));
+        var activationStore = new InMemoryAuthorityActivationStore();
+        var sessionStore = new InMemoryAuthoritySessionStore();
+        var validator = new AbilityActivationValidator();
+        var service = new AbilityActivationService(activationStore, sessionStore, validator, timeProvider);
+
+        activationStore.TryAdd(new AuthorityActivationRecord(
+            "activation-001",
+            "session-001",
+            "entity-001",
+            "ability.basic",
+            AuthorityActivationPhase.Accepted,
+            timeProvider.GetUtcNow().AddMilliseconds(-100),
+            timeProvider.GetUtcNow().AddMilliseconds(400),
+            null));
+
+        var result = await service.InterruptAsync(
+            "session-001",
+            " activation-001 ",
+            " activation.interrupted.manual ",
+            CancellationToken.None);
+        var activation = Assert.Single(activationStore.GetSnapshot().Activations);
+
+        Assert.True(result.Interrupted);
+        Assert.Equal("activation-001", result.ActivationInstanceId);
+        Assert.Equal("activation.interrupted.manual", result.InterruptionCode);
+        Assert.Equal(AuthorityActivationPhase.Interrupted, activation.Phase);
+        Assert.Equal(timeProvider.GetUtcNow(), activation.InterruptedAtUtc);
+        Assert.Equal("activation.interrupted.manual", activation.InterruptionCode);
+    }
+
+    [Fact]
+    public async Task InterruptAsync_RejectsEmptyInterruptionCodeWithoutMutatingState()
+    {
+        var timeProvider = new FixedTimeProvider(new DateTimeOffset(2026, 03, 30, 12, 00, 00, TimeSpan.Zero));
+        var activationStore = new InMemoryAuthorityActivationStore();
+        var sessionStore = new InMemoryAuthoritySessionStore();
+        var validator = new AbilityActivationValidator();
+        var service = new AbilityActivationService(activationStore, sessionStore, validator, timeProvider);
+
+        activationStore.TryAdd(new AuthorityActivationRecord(
+            "activation-001",
+            "session-001",
+            "entity-001",
+            "ability.basic",
+            AuthorityActivationPhase.Accepted,
+            timeProvider.GetUtcNow().AddMilliseconds(-100),
+            timeProvider.GetUtcNow().AddMilliseconds(400),
+            null));
+
+        var result = await service.InterruptAsync(
+            "session-001",
+            "activation-001",
+            "   ",
+            CancellationToken.None);
+        var activation = Assert.Single(activationStore.GetSnapshot().Activations);
+
+        Assert.False(result.Interrupted);
+        Assert.Equal("activation.interrupt.invalid-code", result.Code);
+        Assert.Equal(AuthorityActivationPhase.Accepted, activation.Phase);
+        Assert.Null(activation.InterruptedAtUtc);
+    }
+
+    [Fact]
+    public async Task InterruptAsync_RejectsInterruptForDifferentSession()
+    {
+        var timeProvider = new FixedTimeProvider(new DateTimeOffset(2026, 03, 30, 12, 00, 00, TimeSpan.Zero));
+        var activationStore = new InMemoryAuthorityActivationStore();
+        var sessionStore = new InMemoryAuthoritySessionStore();
+        var validator = new AbilityActivationValidator();
+        var service = new AbilityActivationService(activationStore, sessionStore, validator, timeProvider);
+
+        activationStore.TryAdd(new AuthorityActivationRecord(
+            "activation-001",
+            "session-owner",
+            "entity-001",
+            "ability.basic",
+            AuthorityActivationPhase.Accepted,
+            timeProvider.GetUtcNow().AddMilliseconds(-100),
+            timeProvider.GetUtcNow().AddMilliseconds(400),
+            null));
+
+        var result = await service.InterruptAsync(
+            "session-other",
+            "activation-001",
+            "activation.interrupted.manual",
+            CancellationToken.None);
+        var activation = Assert.Single(activationStore.GetSnapshot().Activations);
+
+        Assert.False(result.Interrupted);
+        Assert.Equal("activation.interrupt.session-mismatch", result.Code);
+        Assert.Equal(AuthorityActivationPhase.Accepted, activation.Phase);
+        Assert.Null(activation.InterruptedAtUtc);
+    }
+
+    [Fact]
+    public async Task InterruptAsync_RejectsAlreadyCommittedActivation()
+    {
+        var timeProvider = new FixedTimeProvider(new DateTimeOffset(2026, 03, 30, 12, 00, 00, TimeSpan.Zero));
+        var activationStore = new InMemoryAuthorityActivationStore();
+        var sessionStore = new InMemoryAuthoritySessionStore();
+        var validator = new AbilityActivationValidator();
+        var service = new AbilityActivationService(activationStore, sessionStore, validator, timeProvider);
+
+        activationStore.TryAdd(new AuthorityActivationRecord(
+            "activation-001",
+            "session-001",
+            "entity-001",
+            "ability.basic",
+            AuthorityActivationPhase.Committed,
+            timeProvider.GetUtcNow().AddMilliseconds(-500),
+            timeProvider.GetUtcNow().AddMilliseconds(-100),
+            timeProvider.GetUtcNow().AddMilliseconds(-100)));
+
+        var result = await service.InterruptAsync(
+            "session-001",
+            "activation-001",
+            "activation.interrupted.manual",
+            CancellationToken.None);
+
+        Assert.False(result.Interrupted);
+        Assert.Equal("activation.interrupt.not-interruptible", result.Code);
+        Assert.Contains("Committed", result.Message, StringComparison.Ordinal);
+    }
+
     private sealed class FixedTimeProvider : TimeProvider
     {
         private readonly DateTimeOffset _utcNow;

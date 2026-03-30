@@ -3,5 +3,6 @@ namespace MMOAS.AuthorityService.State;
 public enum AuthorityActivationPhase
 {
     Accepted = 0,
-    Committed = 1
+    Interrupted = 1,
+    Committed = 2
 }

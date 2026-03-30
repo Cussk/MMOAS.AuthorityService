@@ -96,7 +96,7 @@ public sealed class AuthorityWebSocketSessionHandler
             {
                 await socket.CloseAsync(
                     WebSocketCloseStatus.NormalClosure,
-                    "Phase 04 transport session complete.",
+                    "Authority transport session complete.",
                     CancellationToken.None);
             }
 
@@ -164,6 +164,10 @@ public sealed class AuthorityWebSocketSessionHandler
 
                 case AuthorityTransportProtocol.ActivateAbilityMessageType:
                     await HandleActivateAbilityAsync(sessionId, envelope, cancellationToken);
+                    break;
+
+                case AuthorityTransportProtocol.InterruptAbilityMessageType:
+                    await HandleInterruptAbilityAsync(sessionId, envelope, cancellationToken);
                     break;
 
                 default:
@@ -299,6 +303,55 @@ public sealed class AuthorityWebSocketSessionHandler
             AuthorityTransportProtocol.AbilityRejectedMessageType,
             envelope.RequestId,
             rejectedMessage,
+            cancellationToken);
+    }
+
+    private async Task HandleInterruptAbilityAsync(
+        string sessionId,
+        AuthorityInboundMessageEnvelope envelope,
+        CancellationToken cancellationToken)
+    {
+        if (!TryDeserializePayload<InterruptAbilityCommand>(envelope.Payload, out var command))
+        {
+            await SendErrorAsync(
+                sessionId,
+                envelope.RequestId,
+                "transport.invalid-payload",
+                "The interrupt-ability command payload is invalid.",
+                cancellationToken);
+            return;
+        }
+
+        var interruptionResult = await _abilityActivationService.InterruptAsync(
+            sessionId,
+            command!.ActivationInstanceId,
+            command.InterruptionCode,
+            cancellationToken);
+
+        if (!interruptionResult.Interrupted)
+        {
+            await SendErrorAsync(
+                sessionId,
+                envelope.RequestId,
+                interruptionResult.Code!,
+                interruptionResult.Message!,
+                cancellationToken);
+            return;
+        }
+
+        var interruptedMessage = new AbilityInterruptedMessage(
+            interruptionResult.SessionId,
+            interruptionResult.EntityId!,
+            interruptionResult.AbilityId!,
+            interruptionResult.ActivationInstanceId!,
+            interruptionResult.InterruptionCode!,
+            interruptionResult.InterruptedAtUtc!.Value);
+
+        await SendEnvelopeAsync(
+            interruptionResult.SessionId,
+            AuthorityTransportProtocol.AbilityInterruptedMessageType,
+            envelope.RequestId,
+            interruptedMessage,
             cancellationToken);
     }
 

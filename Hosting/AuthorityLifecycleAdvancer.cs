@@ -75,6 +75,7 @@ public sealed class AuthorityLifecycleAdvancer
 
     private static bool IsCommitEligible(AuthorityActivationRecord activation, DateTimeOffset utcNow)
     {
+        // Interrupted activations stay terminal in this phase because only Accepted can advance on the timed path.
         return activation.Phase == AuthorityActivationPhase.Accepted
                && utcNow >= activation.CommitDueAtUtc;
     }

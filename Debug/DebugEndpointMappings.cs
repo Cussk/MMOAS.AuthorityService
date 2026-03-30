@@ -52,7 +52,9 @@ public static class DebugEndpointMappings
                         activation.Phase.ToString(),
                         activation.CreatedAtUtc,
                         activation.CommitDueAtUtc,
-                        activation.CommittedAtUtc))
+                        activation.CommittedAtUtc,
+                        activation.InterruptionCode,
+                        activation.InterruptedAtUtc))
                     .ToArray());
 
             return Results.Ok(response);

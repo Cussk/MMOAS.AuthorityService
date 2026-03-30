@@ -62,9 +62,30 @@ try
             JsonSerializer.SerializeToElement(new ActivateAbilityCommand(options.AbilityId), serializerOptions)),
         cancellationSource.Token);
 
-    Console.WriteLine("Waiting for authoritative commit event...");
-    var committedEnvelope = await ReceiveAndPrintAsync(socket, cancellationSource.Token);
-    EnsureCommittedActivationMatches(committedEnvelope);
+    if (options.InterruptAfterActivate)
+    {
+        EnsureAcceptedActivationExists();
+
+        await SendAndReceiveAsync(
+            socket,
+            new AuthorityInboundMessageEnvelope(
+                AuthorityTransportProtocol.InterruptAbilityMessageType,
+                AuthorityTransportProtocol.Version,
+                "interrupt-001",
+                JsonSerializer.SerializeToElement(
+                    new InterruptAbilityCommand(lastAcceptedActivationInstanceId, options.InterruptionCode),
+                    serializerOptions)),
+            cancellationSource.Token);
+
+        Console.WriteLine("Waiting to confirm no authoritative commit event arrives...");
+        await EnsureNoCommitArrivesAsync(socket);
+    }
+    else
+    {
+        Console.WriteLine("Waiting for authoritative commit event...");
+        var committedEnvelope = await ReceiveAndPrintAsync(socket, cancellationSource.Token);
+        EnsureCommittedActivationMatches(committedEnvelope);
+    }
 }
 finally
 {
@@ -77,7 +98,7 @@ finally
     }
 }
 
-async Task SendAndReceiveAsync(
+async Task<ClientInboundEnvelope?> SendAndReceiveAsync(
     ClientWebSocket clientSocket,
     AuthorityInboundMessageEnvelope envelope,
     CancellationToken cancellationToken)
@@ -89,7 +110,7 @@ async Task SendAndReceiveAsync(
     var outboundBytes = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(envelope, serializerOptions));
     await clientSocket.SendAsync(outboundBytes, WebSocketMessageType.Text, true, cancellationToken);
 
-    await ReceiveAndPrintAsync(clientSocket, cancellationToken);
+    return await ReceiveAndPrintAsync(clientSocket, cancellationToken);
 }
 
 async Task<ClientInboundEnvelope?> ReceiveAndPrintAsync(
@@ -168,6 +189,17 @@ void PrintActivationSummary(ClientInboundEnvelope? inboundEnvelope)
             Console.WriteLine($"Committed activation instance: {committedMessage.ActivationInstanceId} at {committedMessage.CommittedAtUtc:O}");
         }
     }
+
+    if (inboundEnvelope.MessageType == AuthorityTransportProtocol.AbilityInterruptedMessageType)
+    {
+        var interruptedMessage = inboundEnvelope.Payload.Deserialize<AbilityInterruptedMessage>(serializerOptions);
+
+        if (interruptedMessage is not null)
+        {
+            Console.WriteLine(
+                $"Interrupted activation instance: {interruptedMessage.ActivationInstanceId} at {interruptedMessage.InterruptedAtUtc:O} with code '{interruptedMessage.InterruptionCode}'");
+        }
+    }
 }
 
 void EnsureCommittedActivationMatches(ClientInboundEnvelope? inboundEnvelope)
@@ -193,13 +225,45 @@ void EnsureCommittedActivationMatches(ClientInboundEnvelope? inboundEnvelope)
     }
 }
 
-internal sealed record TestClientOptions(string WebSocketUrl, string AbilityId, bool ActivateBeforeRegister)
+void EnsureAcceptedActivationExists()
+{
+    if (string.IsNullOrWhiteSpace(lastAcceptedActivationInstanceId))
+    {
+        throw new InvalidOperationException("No accepted activation instance was observed before requesting interruption.");
+    }
+}
+
+async Task EnsureNoCommitArrivesAsync(ClientWebSocket clientSocket)
+{
+    using var quietPeriod = new CancellationTokenSource(TimeSpan.FromSeconds(1.25));
+
+    try
+    {
+        var unexpectedEnvelope = await ReceiveAndPrintAsync(clientSocket, quietPeriod.Token);
+
+        throw new InvalidOperationException(
+            $"Expected no further lifecycle event for interrupted activation '{lastAcceptedActivationInstanceId}', but received '{unexpectedEnvelope?.MessageType ?? "unknown"}'.");
+    }
+    catch (OperationCanceledException) when (quietPeriod.IsCancellationRequested)
+    {
+        Console.WriteLine("No commit event arrived during the quiet period.");
+    }
+}
+
+internal sealed record TestClientOptions(
+    string WebSocketUrl,
+    string AbilityId,
+    bool ActivateBeforeRegister,
+    bool InterruptAfterActivate,
+    string InterruptionCode)
 {
     public static TestClientOptions Parse(string[] args)
     {
         var webSocketUrl = "ws://localhost:5274/transport/ws";
         var abilityId = "ability.basic";
         var activateBeforeRegister = false;
+        var interruptAfterActivate = false;
+        var interruptionCode = "activation.interrupted.manual";
 
         for (var index = 0; index < args.Length; index++)
         {
@@ -217,12 +281,25 @@ internal sealed record TestClientOptions(string WebSocketUrl, string AbilityId, 
                     activateBeforeRegister = true;
                     break;
 
+                case "--interrupt-after-activate":
+                    interruptAfterActivate = true;
+                    break;
+
+                case "--interruption-code":
+                    interruptionCode = ReadValue(args, ++index, "--interruption-code");
+                    break;
+
                 default:
                     throw new ArgumentException($"Unknown argument '{args[index]}'.");
             }
         }
 
-        return new TestClientOptions(webSocketUrl, abilityId, activateBeforeRegister);
+        return new TestClientOptions(
+            webSocketUrl,
+            abilityId,
+            activateBeforeRegister,
+            interruptAfterActivate,
+            interruptionCode);
     }
 
     private static string ReadValue(string[] args, int index, string optionName)
