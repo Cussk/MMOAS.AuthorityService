@@ -10,7 +10,7 @@ namespace MMOAS.AuthorityService.Composition;
 
 public static class ServiceCollectionExtensions
 {
-    public static IServiceCollection AddAuthorityServicePhase03(this IServiceCollection services)
+    public static IServiceCollection AddAuthorityServicePhase04(this IServiceCollection services)
     {
         services.AddSingleton(TimeProvider.System);
         services.AddSingleton<IAuthorityActivationStore, InMemoryAuthorityActivationStore>();
@@ -20,6 +20,9 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IAuthoritySessionService, AuthoritySessionService>();
         services.AddSingleton<IAbilityActivationValidator, AbilityActivationValidator>();
         services.AddSingleton<IAbilityActivationService, AbilityActivationService>();
+        services.AddSingleton<AuthorityTransportSessionRouter>();
+        services.AddSingleton<IAuthoritySessionNotifier>(provider => provider.GetRequiredService<AuthorityTransportSessionRouter>());
+        services.AddSingleton<AuthorityLifecycleAdvancer>();
         services.AddSingleton<AuthorityWebSocketSessionHandler>();
         services.AddHostedService<AuthorityLifecycleHostedService>();
 

@@ -46,7 +46,10 @@ public sealed class AbilityActivationServiceTests
         Assert.Equal(result.ActivationInstanceId, snapshot.Activations[0].ActivationInstanceId);
         Assert.Equal("session-001", snapshot.Activations[0].SessionId);
         Assert.Equal("entity-001", snapshot.Activations[0].EntityId);
+        Assert.Equal(AuthorityActivationPhase.Accepted, snapshot.Activations[0].Phase);
         Assert.Equal(timeProvider.GetUtcNow(), snapshot.Activations[0].CreatedAtUtc);
+        Assert.Equal(timeProvider.GetUtcNow().AddMilliseconds(500), snapshot.Activations[0].CommitDueAtUtc);
+        Assert.Null(snapshot.Activations[0].CommittedAtUtc);
     }
 
     [Fact]

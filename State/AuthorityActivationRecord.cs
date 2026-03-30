@@ -5,4 +5,7 @@ public sealed record AuthorityActivationRecord(
     string SessionId,
     string EntityId,
     string AbilityId,
-    DateTimeOffset CreatedAtUtc);
+    AuthorityActivationPhase Phase,
+    DateTimeOffset CreatedAtUtc,
+    DateTimeOffset CommitDueAtUtc,
+    DateTimeOffset? CommittedAtUtc);

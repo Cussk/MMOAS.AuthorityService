@@ -2,14 +2,17 @@ namespace MMOAS.AuthorityService.Hosting;
 
 public sealed class AuthorityLifecycleHostedService : BackgroundService
 {
-    private static readonly TimeSpan TickInterval = TimeSpan.FromSeconds(5);
+    private static readonly TimeSpan TickInterval = TimeSpan.FromMilliseconds(100);
+    private readonly AuthorityLifecycleAdvancer _lifecycleAdvancer;
     private readonly TimeProvider _timeProvider;
     private readonly ILogger<AuthorityLifecycleHostedService> _logger;
 
     public AuthorityLifecycleHostedService(
+        AuthorityLifecycleAdvancer lifecycleAdvancer,
         TimeProvider timeProvider,
         ILogger<AuthorityLifecycleHostedService> logger)
     {
+        _lifecycleAdvancer = lifecycleAdvancer;
         _timeProvider = timeProvider;
         _logger = logger;
     }
@@ -26,11 +29,7 @@ public sealed class AuthorityLifecycleHostedService : BackgroundService
         {
             while (await timer.WaitForNextTickAsync(stoppingToken))
             {
-                // Phase 03 still intentionally avoids lifecycle mutation. This loop exists only to establish the
-                // backend-owned clock boundary that later phases will build on.
-                _logger.LogDebug(
-                    "Authority lifecycle stub tick at {TickAtUtc}",
-                    _timeProvider.GetUtcNow());
+                await _lifecycleAdvancer.AdvanceAsync(_timeProvider.GetUtcNow(), stoppingToken);
             }
         }
         catch (OperationCanceledException)

@@ -49,7 +49,10 @@ public static class DebugEndpointMappings
                         activation.SessionId,
                         activation.EntityId,
                         activation.AbilityId,
-                        activation.CreatedAtUtc))
+                        activation.Phase.ToString(),
+                        activation.CreatedAtUtc,
+                        activation.CommitDueAtUtc,
+                        activation.CommittedAtUtc))
                     .ToArray());
 
             return Results.Ok(response);

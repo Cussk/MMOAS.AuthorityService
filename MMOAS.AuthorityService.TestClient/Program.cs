@@ -14,6 +14,7 @@ var options = TestClientOptions.Parse(args);
 
 using var socket = new ClientWebSocket();
 using var cancellationSource = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+string? lastAcceptedActivationInstanceId = null;
 
 Console.WriteLine($"Connecting to {options.WebSocketUrl}");
 await socket.ConnectAsync(new Uri(options.WebSocketUrl), cancellationSource.Token);
@@ -60,6 +61,10 @@ try
             "activate-001",
             JsonSerializer.SerializeToElement(new ActivateAbilityCommand(options.AbilityId), serializerOptions)),
         cancellationSource.Token);
+
+    Console.WriteLine("Waiting for authoritative commit event...");
+    var committedEnvelope = await ReceiveAndPrintAsync(socket, cancellationSource.Token);
+    EnsureCommittedActivationMatches(committedEnvelope);
 }
 finally
 {
@@ -84,6 +89,13 @@ async Task SendAndReceiveAsync(
     var outboundBytes = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(envelope, serializerOptions));
     await clientSocket.SendAsync(outboundBytes, WebSocketMessageType.Text, true, cancellationToken);
 
+    await ReceiveAndPrintAsync(clientSocket, cancellationToken);
+}
+
+async Task<ClientInboundEnvelope?> ReceiveAndPrintAsync(
+    ClientWebSocket clientSocket,
+    CancellationToken cancellationToken)
+{
     var inboundJson = await ReceiveMessageAsync(clientSocket, cancellationToken);
     var inboundEnvelope = JsonSerializer.Deserialize<ClientInboundEnvelope>(inboundJson, serializerOptions);
 
@@ -91,6 +103,8 @@ async Task SendAndReceiveAsync(
     Console.WriteLine(PrettyPrintJson(inboundJson));
     PrintActivationSummary(inboundEnvelope);
     Console.WriteLine();
+
+    return inboundEnvelope;
 }
 
 async Task<string> ReceiveMessageAsync(ClientWebSocket clientSocket, CancellationToken cancellationToken)
@@ -140,8 +154,42 @@ void PrintActivationSummary(ClientInboundEnvelope? inboundEnvelope)
 
         if (acceptedMessage is not null)
         {
+            lastAcceptedActivationInstanceId = acceptedMessage.ActivationInstanceId;
             Console.WriteLine($"Activation instance: {acceptedMessage.ActivationInstanceId}");
         }
+    }
+
+    if (inboundEnvelope.MessageType == AuthorityTransportProtocol.AbilityCommittedMessageType)
+    {
+        var committedMessage = inboundEnvelope.Payload.Deserialize<AbilityCommittedMessage>(serializerOptions);
+
+        if (committedMessage is not null)
+        {
+            Console.WriteLine($"Committed activation instance: {committedMessage.ActivationInstanceId} at {committedMessage.CommittedAtUtc:O}");
+        }
+    }
+}
+
+void EnsureCommittedActivationMatches(ClientInboundEnvelope? inboundEnvelope)
+{
+    if (string.IsNullOrWhiteSpace(lastAcceptedActivationInstanceId))
+    {
+        throw new InvalidOperationException("No accepted activation instance was observed before waiting for commit.");
+    }
+
+    if (inboundEnvelope?.MessageType != AuthorityTransportProtocol.AbilityCommittedMessageType)
+    {
+        throw new InvalidOperationException(
+            $"Expected '{AuthorityTransportProtocol.AbilityCommittedMessageType}' but received '{inboundEnvelope?.MessageType ?? "unknown"}'.");
+    }
+
+    var committedMessage = inboundEnvelope.Payload.Deserialize<AbilityCommittedMessage>(serializerOptions)
+        ?? throw new InvalidOperationException("The commit payload was missing or invalid.");
+
+    if (!string.Equals(committedMessage.ActivationInstanceId, lastAcceptedActivationInstanceId, StringComparison.Ordinal))
+    {
+        throw new InvalidOperationException(
+            $"Expected commit for activation '{lastAcceptedActivationInstanceId}' but received '{committedMessage.ActivationInstanceId}'.");
     }
 }
 

@@ -11,19 +11,19 @@ namespace MMOAS.AuthorityService.Transport;
 public sealed class AuthorityWebSocketSessionHandler
 {
     private static readonly JsonSerializerOptions SerializerOptions = new(JsonSerializerDefaults.Web);
-    private readonly TimeProvider _timeProvider;
     private readonly IAbilityActivationService _abilityActivationService;
+    private readonly AuthorityTransportSessionRouter _sessionRouter;
     private readonly IAuthoritySessionService _sessionService;
     private readonly ILogger<AuthorityWebSocketSessionHandler> _logger;
 
     public AuthorityWebSocketSessionHandler(
-        TimeProvider timeProvider,
         IAbilityActivationService abilityActivationService,
+        AuthorityTransportSessionRouter sessionRouter,
         IAuthoritySessionService sessionService,
         ILogger<AuthorityWebSocketSessionHandler> logger)
     {
-        _timeProvider = timeProvider;
         _abilityActivationService = abilityActivationService;
+        _sessionRouter = sessionRouter;
         _sessionService = sessionService;
         _logger = logger;
     }
@@ -39,6 +39,7 @@ public sealed class AuthorityWebSocketSessionHandler
         var sessionId = context.TraceIdentifier;
 
         await _sessionService.CreateSessionAsync(sessionId, cancellationToken);
+        _sessionRouter.RegisterSession(sessionId, socket);
         _logger.LogInformation("Accepted WebSocket session {SessionId}", sessionId);
 
         try
@@ -64,7 +65,7 @@ public sealed class AuthorityWebSocketSessionHandler
                 if (!received.IsText)
                 {
                     await SendErrorAsync(
-                        socket,
+                        sessionId,
                         null,
                         "transport.invalid-message-type",
                         "Expected a text WebSocket message.",
@@ -75,7 +76,7 @@ public sealed class AuthorityWebSocketSessionHandler
                 if (string.IsNullOrWhiteSpace(received.MessageText))
                 {
                     await SendErrorAsync(
-                        socket,
+                        sessionId,
                         null,
                         "transport.invalid-payload",
                         "Expected a non-empty transport message.",
@@ -83,18 +84,19 @@ public sealed class AuthorityWebSocketSessionHandler
                     continue;
                 }
 
-                await ProcessMessageAsync(socket, sessionId, received.MessageText, cancellationToken);
+                await ProcessMessageAsync(sessionId, received.MessageText, cancellationToken);
             }
         }
         finally
         {
+            await _sessionRouter.UnregisterSessionAsync(sessionId);
             await _sessionService.RemoveSessionAsync(sessionId);
 
             if (socket.State == WebSocketState.Open || socket.State == WebSocketState.CloseReceived)
             {
                 await socket.CloseAsync(
                     WebSocketCloseStatus.NormalClosure,
-                    "Phase 03 transport session complete.",
+                    "Phase 04 transport session complete.",
                     CancellationToken.None);
             }
 
@@ -105,7 +107,6 @@ public sealed class AuthorityWebSocketSessionHandler
     }
 
     private async Task ProcessMessageAsync(
-        WebSocket socket,
         string sessionId,
         string messageText,
         CancellationToken cancellationToken)
@@ -119,7 +120,7 @@ public sealed class AuthorityWebSocketSessionHandler
         catch (JsonException)
         {
             await SendErrorAsync(
-                socket,
+                sessionId,
                 null,
                 "transport.invalid-json",
                 "The transport message was not valid JSON.",
@@ -130,7 +131,7 @@ public sealed class AuthorityWebSocketSessionHandler
         if (envelope is null || string.IsNullOrWhiteSpace(envelope.MessageType))
         {
             await SendErrorAsync(
-                socket,
+                sessionId,
                 null,
                 "transport.invalid-envelope",
                 "The transport message envelope is missing required fields.",
@@ -141,7 +142,7 @@ public sealed class AuthorityWebSocketSessionHandler
         if (envelope.Version != AuthorityTransportProtocol.Version)
         {
             await SendErrorAsync(
-                socket,
+                sessionId,
                 envelope.RequestId,
                 "transport.unsupported-version",
                 $"Unsupported protocol version '{envelope.Version}'.",
@@ -154,20 +155,20 @@ public sealed class AuthorityWebSocketSessionHandler
             switch (envelope.MessageType)
             {
                 case AuthorityTransportProtocol.HelloMessageType:
-                    await HandleHelloAsync(socket, sessionId, envelope, cancellationToken);
+                    await HandleHelloAsync(sessionId, envelope, cancellationToken);
                     break;
 
                 case AuthorityTransportProtocol.RegisterEntityMessageType:
-                    await HandleRegisterEntityAsync(socket, sessionId, envelope, cancellationToken);
+                    await HandleRegisterEntityAsync(sessionId, envelope, cancellationToken);
                     break;
 
                 case AuthorityTransportProtocol.ActivateAbilityMessageType:
-                    await HandleActivateAbilityAsync(socket, sessionId, envelope, cancellationToken);
+                    await HandleActivateAbilityAsync(sessionId, envelope, cancellationToken);
                     break;
 
                 default:
                     await SendErrorAsync(
-                        socket,
+                        sessionId,
                         envelope.RequestId,
                         "transport.unsupported-message",
                         $"Unsupported message type '{envelope.MessageType}'.",
@@ -178,7 +179,7 @@ public sealed class AuthorityWebSocketSessionHandler
         catch (AuthoritySessionException exception)
         {
             await SendErrorAsync(
-                socket,
+                sessionId,
                 envelope.RequestId,
                 exception.Code,
                 exception.Message,
@@ -187,7 +188,6 @@ public sealed class AuthorityWebSocketSessionHandler
     }
 
     private async Task HandleHelloAsync(
-        WebSocket socket,
         string sessionId,
         AuthorityInboundMessageEnvelope envelope,
         CancellationToken cancellationToken)
@@ -195,7 +195,7 @@ public sealed class AuthorityWebSocketSessionHandler
         if (!TryDeserializePayload<HelloCommand>(envelope.Payload, out _))
         {
             await SendErrorAsync(
-                socket,
+                sessionId,
                 envelope.RequestId,
                 "transport.invalid-payload",
                 "The hello command payload is invalid.",
@@ -210,7 +210,7 @@ public sealed class AuthorityWebSocketSessionHandler
             helloCompleted.HelloCompleted);
 
         await SendEnvelopeAsync(
-            socket,
+            sessionId,
             AuthorityTransportProtocol.ReadyMessageType,
             envelope.RequestId,
             readyMessage,
@@ -218,7 +218,6 @@ public sealed class AuthorityWebSocketSessionHandler
     }
 
     private async Task HandleRegisterEntityAsync(
-        WebSocket socket,
         string sessionId,
         AuthorityInboundMessageEnvelope envelope,
         CancellationToken cancellationToken)
@@ -226,7 +225,7 @@ public sealed class AuthorityWebSocketSessionHandler
         if (!TryDeserializePayload<RegisterEntityCommand>(envelope.Payload, out _))
         {
             await SendErrorAsync(
-                socket,
+                sessionId,
                 envelope.RequestId,
                 "transport.invalid-payload",
                 "The register-entity command payload is invalid.",
@@ -241,7 +240,7 @@ public sealed class AuthorityWebSocketSessionHandler
             registeredEntity.RegisteredAtUtc);
 
         await SendEnvelopeAsync(
-            socket,
+            sessionId,
             AuthorityTransportProtocol.EntityRegisteredMessageType,
             envelope.RequestId,
             entityRegisteredMessage,
@@ -249,7 +248,6 @@ public sealed class AuthorityWebSocketSessionHandler
     }
 
     private async Task HandleActivateAbilityAsync(
-        WebSocket socket,
         string sessionId,
         AuthorityInboundMessageEnvelope envelope,
         CancellationToken cancellationToken)
@@ -257,7 +255,7 @@ public sealed class AuthorityWebSocketSessionHandler
         if (!TryDeserializePayload<ActivateAbilityCommand>(envelope.Payload, out var command))
         {
             await SendErrorAsync(
-                socket,
+                sessionId,
                 envelope.RequestId,
                 "transport.invalid-payload",
                 "The activate-ability command payload is invalid.",
@@ -279,7 +277,7 @@ public sealed class AuthorityWebSocketSessionHandler
                 activationResult.ActivationInstanceId!);
 
             await SendEnvelopeAsync(
-                socket,
+                sessionId,
                 AuthorityTransportProtocol.AbilityAcceptedMessageType,
                 envelope.RequestId,
                 acceptedMessage,
@@ -297,7 +295,7 @@ public sealed class AuthorityWebSocketSessionHandler
             rejectedAbilityId);
 
         await SendEnvelopeAsync(
-            socket,
+            sessionId,
             AuthorityTransportProtocol.AbilityRejectedMessageType,
             envelope.RequestId,
             rejectedMessage,
@@ -305,14 +303,14 @@ public sealed class AuthorityWebSocketSessionHandler
     }
 
     private async Task SendErrorAsync(
-        WebSocket socket,
+        string sessionId,
         string? requestId,
         string code,
         string message,
         CancellationToken cancellationToken)
     {
         await SendEnvelopeAsync(
-            socket,
+            sessionId,
             AuthorityTransportProtocol.ErrorMessageType,
             requestId,
             new TransportErrorMessage(code, message),
@@ -320,26 +318,13 @@ public sealed class AuthorityWebSocketSessionHandler
     }
 
     private async Task SendEnvelopeAsync(
-        WebSocket socket,
+        string sessionId,
         string messageType,
         string? requestId,
         object payload,
         CancellationToken cancellationToken)
     {
-        if (socket.State != WebSocketState.Open)
-        {
-            return;
-        }
-
-        var envelope = new AuthorityOutboundMessageEnvelope(
-            messageType,
-            AuthorityTransportProtocol.Version,
-            _timeProvider.GetUtcNow(),
-            requestId,
-            payload);
-
-        var bytes = JsonSerializer.SerializeToUtf8Bytes(envelope, SerializerOptions);
-        await socket.SendAsync(bytes, WebSocketMessageType.Text, true, cancellationToken);
+        await _sessionRouter.SendAsync(sessionId, messageType, requestId, payload, cancellationToken);
     }
 
     private static bool TryDeserializePayload<T>(JsonElement? payload, out T? message)

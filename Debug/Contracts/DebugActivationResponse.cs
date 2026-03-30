@@ -5,4 +5,7 @@ public sealed record DebugActivationResponse(
     string SessionId,
     string EntityId,
     string AbilityId,
-    DateTimeOffset CreatedAtUtc);
+    string Phase,
+    DateTimeOffset CreatedAtUtc,
+    DateTimeOffset CommitDueAtUtc,
+    DateTimeOffset? CommittedAtUtc);

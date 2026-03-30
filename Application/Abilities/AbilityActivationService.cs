@@ -5,6 +5,7 @@ namespace MMOAS.AuthorityService.Application.Abilities;
 
 public sealed class AbilityActivationService : IAbilityActivationService
 {
+    private static readonly TimeSpan StartupDuration = TimeSpan.FromMilliseconds(500);
     private readonly IAuthorityActivationStore _activationStore;
     private readonly IAuthoritySessionStore _sessionStore;
     private readonly TimeProvider _timeProvider;
@@ -59,6 +60,8 @@ public sealed class AbilityActivationService : IAbilityActivationService
     {
         while (true)
         {
+            var createdAtUtc = _timeProvider.GetUtcNow();
+
             // Activation instances are backend-owned so later lifecycle/timing phases can correlate against
             // a server-generated runtime identity rather than any client-local prediction token.
             var activation = new AuthorityActivationRecord(
@@ -66,7 +69,10 @@ public sealed class AbilityActivationService : IAbilityActivationService
                 sessionId,
                 entityId,
                 abilityId,
-                _timeProvider.GetUtcNow());
+                AuthorityActivationPhase.Accepted,
+                createdAtUtc,
+                createdAtUtc + StartupDuration,
+                null);
 
             if (_activationStore.TryAdd(activation))
             {
