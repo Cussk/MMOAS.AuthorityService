@@ -161,7 +161,7 @@ Invoke-RestMethod http://localhost:5274/debug/health
 3. Open the Unreal project:
 
 ```text
-C:\Users\cussp\OneDrive\Documents\UnrealProjects\MassiveMultiplayerOnlineAbilitySystem\MMOAbilitySystem.uproject
+MMOAbilitySystem.uproject
 ```
 
 4. On the actor or pawn that owns `UMMOASAbilityComponent`, set:
