@@ -8,7 +8,7 @@ It is not a full MMO backend. It intentionally avoids accounts, persistence, inv
 
 ## How It Relates To MMOAS
 
-MMOAS is the Unreal-side ability runtime. It owns local ability instances, prediction-facing phase changes, targeting, follow-up input, cancel/cut behavior, and gameplay-side debug logs.
+MMOAS is the Unreal-side ability runtime. It owns local ability instances, prediction-facing phase changes, targeting, follow-up input, cancel/trim behavior, and gameplay-side debug logs.
 
 This service owns the remote authority slice:
 
@@ -191,7 +191,7 @@ Expected MMOAS log flow:
 - Backend later sends `transport.ability-committed`.
 - MMOAS enters `Committed`.
 
-For cancel/cut testing, trigger a local cancel/cut before the backend commit arrives. MMOAS should send `transport.interrupt-ability`; the backend should return `transport.ability-interrupted` if the activation is still accepted.
+For cancel/trim testing, trigger a local cancel/trim before the backend commit arrives. MMOAS should send `transport.interrupt-ability`; the backend should return `transport.ability-interrupted` if the activation is still accepted.
 
 ## Debug Endpoints
 

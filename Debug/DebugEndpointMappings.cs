@@ -7,8 +7,8 @@ public static class DebugEndpointMappings
 {
     public static IEndpointRouteBuilder MapDebugEndpoints(this IEndpointRouteBuilder endpoints)
     {
-        endpoints.MapGet("/debug/health", (TimeProvider timeProvider) =>
-            Results.Ok(new DebugHealthResponse("ok", timeProvider.GetUtcNow())));
+        endpoints.MapGet("/", GetHealth);
+        endpoints.MapGet("/debug/health", GetHealth);
 
         endpoints.MapGet("/debug/snapshot", (IAuthorityEntityStore entityStore) =>
         {
@@ -62,4 +62,7 @@ public static class DebugEndpointMappings
 
         return endpoints;
     }
+
+    private static IResult GetHealth(TimeProvider timeProvider) =>
+        Results.Ok(new DebugHealthResponse("ok", timeProvider.GetUtcNow()));
 }
